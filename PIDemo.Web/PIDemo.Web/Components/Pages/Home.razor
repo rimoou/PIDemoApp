@@ -1,0 +1,503 @@
+﻿@page "/"
+@using System.Collections.Frozen
+@using System.Diagnostics.CodeAnalysis
+@using System.Net.Mime
+@using System.Text.RegularExpressions
+@using PIDemo.Service
+@using Console = System.Console
+@using PISDK
+@rendermode  InteractiveServer
+
+<style>
+    .l-row{
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .l-row:not(:last-child){
+        margin-bottom: 10px;
+    }
+    .l-mb10{
+        margin-bottom: 10px;
+    }
+</style>
+
+
+<BootstrapBlazorRoot>
+<PageTitle>Home</PageTitle>
+
+<h1>PI Server Demo</h1>
+
+
+<div class="row align-items-center" style="margin-bottom: 20px">
+    <span class="col-1">PI Server</span>
+    <div class="col-11">
+        <BootstrapInput @bind-Value="@IpAddr"></BootstrapInput>
+    </div>
+
+
+</div>
+
+<div class="row align-items-center">
+    <span class="col-1">端口</span>
+    <div class="col-11">
+        <BootstrapInputNumber Value="@Port" IsSelectAllTextOnFocus="true"/>
+    </div>
+
+
+</div>
+
+<p/>
+<Button OnClick="Connect">连接服务器</Button>
+<Button OnClick="Disconnect">断开连接</Button>
+
+<p/>
+<Divider/>
+@if (_server is not null)
+{
+    <Card>
+        <BodyTemplate>
+            <h5>连接信息</h5>
+            <div>服务器: @_server.Name</div>
+            <div>服务器Id: @_server.ServerID</div>
+            <div>服务器路径: @_server.Path</div>
+            <div>服务器端口: @_server.Port</div>
+            <div>当前用户: @_server.CurrentUser</div>
+            <div>连接类型: @_server.ConnectionType</div>
+            <div>PI Server版本: @_server.ServerVersion.Version</div>
+            <div>服务器系统: @_server.ServerVersion.OSName @_server.ServerVersion.OSVersion</div>
+
+
+        </BodyTemplate>
+    </Card>
+    <p/>
+
+    <Tab IsBorderCard="true">
+        <TabItem Text="点位快照">
+            <Card>
+                <BodyTemplate>
+                    <div>点位实时快照查询</div>
+                    <Divider/>
+                    <div style="display: flex;gap: 10px;">
+                        <BootstrapInput @bind-Value="@TagName"></BootstrapInput>
+                        <Button OnClick="OnBtnGetPointSnap">查询</Button>
+                    </div>
+
+                    <p></p>
+                    @if (PiPoint is not null)
+                    {
+                        <div>Tag:@PiPoint.TagName</div>
+                        <div>Value:@PiPoint.Pvalue</div>
+                        <div></div>
+                        foreach (var kv in PiPoint.PointProperty)
+                        {
+                            <div class="row" style="padding: 3px 0;margin-bottom: 5px;border-bottom: 1px solid #dee2e6;">
+                                <div class="col-2">@kv.Key: </div>
+                                <div class="col-10">@kv.Value</div>
+                            </div>
+                        }
+                    }
+
+                </BodyTemplate>
+
+            </Card>
+        </TabItem>
+        <TabItem Text="点位归档">
+            <Card>
+                <BodyTemplate>
+                    <div style="margin-bottom: 10px;">
+                        <div>点位归档查询</div>
+                        <BootstrapInput @bind-Value="@TagName"></BootstrapInput>
+                    </div>
+
+                    <div style="display: flex;align-items: center;margin-bottom: 10px;gap: 40px">
+                        <div style="display: flex;align-items: center">
+                            <span>起始时间</span>
+                            <DateTimePicker OnValueChanged="OnValueChanged" ViewMode="DatePickerViewMode.DateTime"
+                                            @bind-Value="@DateTimeStart">
+                                <TimePickerSetting ShowClockScale="true" IsAutoSwitch="false"/>
+                            </DateTimePicker>
+                        </div>
+
+                        <div style="display: flex;align-items: center">
+                            <span>结束时间</span>
+                            <DateTimePicker ViewMode="DatePickerViewMode.DateTime" OnValueChanged="OnValueChanged"
+                                            @bind-Value="@DateTimeEnd">
+                                <TimePickerSetting ShowClockScale="true" IsAutoSwitch="false"/>
+                            </DateTimePicker>
+                        </div>
+
+                    </div>
+                    <div style="display: flex">
+                        <Button OnClick="OnBtnGetPointArchive">查询</Button>
+                        @if (!string.IsNullOrEmpty(AlertText))
+                        {
+                            <div class="col-6 col-sm-4 col-md-3 col-lg-auto">
+                                <Badge Color="Color.Warning">@AlertText</Badge>
+                            </div>
+                        }
+                    </div>
+
+                    <p/>
+                    @if (PointArchives is not null && PointArchives.Count > 0)
+                    {
+                        <Table TItem="Point" Items="@PointArchives" AutoGenerateColumns="true"></Table>
+                    }
+
+                </BodyTemplate>
+            </Card>
+        </TabItem>
+        <TabItem Text="添加点位">
+            @if (PTypeConsts is not null && PTypeConsts.Count > 0)
+            {
+                <Card>
+                    <BodyTemplate>
+                        <div class="row  align-items-center l-mb10">
+                            <span class="col-1">tag</span>
+                            <div class="col-10">
+                                <BootstrapInput @bind-Value="@TagName"></BootstrapInput>
+                            </div>
+                        </div>
+                        <div class="row  align-items-center l-mb10">
+                            <span class="col-1">point type</span>
+                            @* <Dropdown OnSelectedItemChanged="OnDwPointType" TValue="string" Items="PTypeConsts"></Dropdown> *@
+                            <div class="col-5">
+                                <Select Items="PTypeConsts" @bind-Value="SelectedPointtype"></Select>
+                            </div>
+
+                        </div>
+                        <div>
+                            <div>
+
+                                <span>point attributes</span>
+                                <div>
+                                    输入点位属性（如果有需要特别配置的,没有则不输入）
+                                    e.g.
+                                    &quot;pointsource&quot;=&quot;123&quot;
+                                    &quot;location1&quot;=&quot;1&quot;
+                                    &quot;compressing&quot;=&quot;1&quot;
+                                    &quot;descriptor&quot;=&quot;This is a descriptor&quot;
+                                </div>
+                            </div>
+
+                            <Textarea @bind-Value="TagAttris" PlaceHolder="&quot;compressing&quot;=&quot;1&quot;"
+rows="6"></Textarea>
+                        </div>
+
+                        <Divider></Divider>
+                        <Button OnClick="OnBtnAddPoint">添加点位</Button>
+                    </BodyTemplate>
+                </Card>
+            }
+
+        </TabItem>
+        <TabItem Text="批量添加点位">
+            @if (PTypeConsts is not null && PTypeConsts.Count > 0)
+            {
+                <Card>
+                    <BodyTemplate>
+                        <div class="row l-mb10 align-items-center">
+                            <span class="col-2">输入tags 以逗号分隔</span>
+                            <div class="col-10">
+                                <BootstrapInput @bind-Value="@TagNames"></BootstrapInput>
+                            </div>
+                        </div>
+                        <div class="row l-mb10  align-items-center">
+                            <span class="col-2">point type</span>
+                            @* <Dropdown @ref="PTypeDw" OnSelectedItemChanged="OnDwPointType" TValue="SelectedItem" Items="PTypeConsts"></Dropdown> *@
+                            <div class="col-5">
+                                <Select Items="PTypeConsts" @bind-Value="SelectedPointtype"></Select>
+                            </div>
+                        </div>
+                        <div class="l-mb10">
+                            <div style="">
+
+                                <span>point attributes</span>
+                                <div>
+                                    输入点位属性（如果有需要特别配置的,没有则不输入）
+                                    e.g.
+                                    &quot;pointsource&quot;=&quot;123&quot;
+                                    &quot;location1&quot;=&quot;1&quot;
+                                    &quot;compressing&quot;=&quot;1&quot;
+                                    &quot;descriptor&quot;=&quot;This is a descriptor&quot;
+                                </div>
+                            </div>
+
+                            <Textarea @bind-Value="TagAttris" PlaceHolder="&quot;compressing&quot;=&quot;1&quot;"
+                                      rows="6"></Textarea>
+                        </div>
+
+                        <Divider></Divider>
+                        <Button OnClick="OnBtnAddMultPoint">添加点位</Button>
+                    </BodyTemplate>
+                </Card>
+            }
+
+        </TabItem>
+        <TabItem Text="更新点位">
+            <Card>
+                <BodyTemplate>
+
+                    <div class="row  align-items-center l-mb10">
+                        <span class="col-1">tag</span>
+                        <div class="col-10">
+                            <BootstrapInput @bind-Value="@TagName"></BootstrapInput>
+                        </div>
+                    </div>
+                    <div class="row  align-items-center l-mb10">
+                        <span class="col-1">new value</span>
+                        <div class="col-10">
+                            <BootstrapInput @bind-Value="@NewValue"></BootstrapInput>
+                        </div>
+                    </div>
+                    <div class="row l-mb10  align-items-center">
+                        <span class="col-2">冲突策略</span>
+                        <div class="col-5">
+                            <Select Items="DataMergeConsts" @bind-Value="SelectedDataMergeOpt"></Select>
+                        </div>
+                    </div>
+                    <Button OnClick="OnBtnUpdatePoint">更新</Button>
+
+                </BodyTemplate>
+            </Card>
+        </TabItem>
+       <TabItem Text="批量更新点位信息">
+            <Card>
+
+            </Card>
+       </TabItem>
+        <TabItem Text="替换点位信息">
+            <Card>
+
+            </Card>
+       </TabItem>
+    </Tab>
+    <p/>
+}
+
+</BootstrapBlazorRoot>
+
+@code
+{
+    [Inject] public PISDKHelper MyPISDKHelper { get; set; }
+    [Inject, NotNull] ToastService? ToastService { get; set; }
+
+    public Dropdown<SelectedItem> PTypeDw { get; set; }
+
+    public string TagName { get; set; }
+    public string? TagNames { get; set; }
+
+    public string? NewValue { get; set; }
+
+    public string? TagAttris { get; set; }
+
+    public string IpAddr { get; set; }
+    public int Port { get; set; } = 5450;
+
+    public Point? PiPoint { get; set; }
+
+    public List<Point>? PointArchives { get; set; }
+
+    public DateTime DateTimeStart { get; set; } = DateTime.Now;
+    public DateTime DateTimeEnd { get; set; } = DateTime.Now;
+
+    private Server _server;
+    public string? AlertText { get; set; }
+
+    public List<SelectedItem> PTypeConsts { get; set; } = [];
+    public SelectedItem? SelectedPointtype { get; set; }
+
+    public List<SelectedItem> DataMergeConsts { get; set; } = [];
+    public SelectedItem? SelectedDataMergeOpt { get; set; }
+    
+    private async void Connect(MouseEventArgs obj)
+    {
+        if (_server is not null && _server.Connected)
+        {
+            MyPISDKHelper.PIClose();
+        }
+
+        PiPoint = null;
+
+        try
+        {
+            _server = MyPISDKHelper.PIOpen(IpAddr, Port);
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            await ToastService.Error("连接失败", $"{e.Message}", autoHide: true);
+            _server = null;
+            return;
+        }
+
+        foreach (var enumValue in Enum.GetValues(typeof(PointTypeConstants)))
+        {
+            PTypeConsts.Add(new()
+            {
+                Text = enumValue.ToString(),
+                Value = ((int)enumValue).ToString()
+            });
+        }
+
+        SelectedPointtype = PTypeConsts.FirstOrDefault();
+
+        
+        foreach (var enumValue in Enum.GetValues(typeof(DataMergeConstants)))
+        {
+            DataMergeConsts.Add(new()
+            {
+                Text = enumValue.ToString(),
+                Value = ((int)enumValue).ToString()
+            });
+        }
+
+        SelectedDataMergeOpt = DataMergeConsts.FirstOrDefault();
+
+        if (_server is not null)
+        {
+            await ToastService.Success("连接成功", $"成功连接至{_server.Name}", autoHide: true);
+        }
+    }
+
+
+    private void Disconnect(MouseEventArgs obj)
+    {
+        MyPISDKHelper.PIClose();
+        _server = null;
+    }
+
+    private void OnBtnGetPointSnap(MouseEventArgs obj)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(TagName))
+            {
+                PiPoint = MyPISDKHelper.Pi_GetPointSnapshot(TagName);
+            }
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
+    }
+
+
+    private void OnBtnGetPointArchive(MouseEventArgs obj)
+    {
+        if (DateTimeEnd < DateTimeStart)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!string.IsNullOrEmpty((TagName)))
+            {
+                PointArchives = MyPISDKHelper.Pi_GetPointValues(TagName, DateTimeStart, DateTimeEnd);
+            }
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e);
+            throw;
+        }
+    }
+
+
+    private Task OnValueChanged(DateTime arg)
+    {
+        if (DateTimeEnd < DateTimeStart)
+        {
+            AlertText = "起始时间必须小于结束时间!";
+        }
+        else
+        {
+            AlertText = string.Empty;
+        }
+
+        return Task.CompletedTask;
+    }
+
+
+    private async void OnBtnAddPoint(MouseEventArgs obj)
+    {
+        if (!string.IsNullOrEmpty(TagName) && SelectedPointtype is not null)
+        {
+            try
+            {
+                var pointType = (PointTypeConstants)Enum.Parse(typeof(PointTypeConstants), SelectedPointtype.Text);
+
+                FrozenDictionary<string, string> attriDic;
+                attriDic = !string.IsNullOrEmpty(TagAttris) ? MatchAttri(TagAttris) : null;
+
+
+                MyPISDKHelper.CreatePoint(TagName, pointType, attriDic);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                await ToastService.Error("添加失败", $"{e.Message}", autoHide: true);
+            }
+        }
+
+        return;
+    }
+
+
+    private async void OnBtnAddMultPoint(MouseEventArgs obj)
+    {
+        if (!string.IsNullOrWhiteSpace(TagNames) && SelectedPointtype is not null)
+        {
+            try
+            {
+                var tagNamesArray = TagNames.Split(",");
+                var pointType = (PointTypeConstants)Enum.Parse(typeof(PointTypeConstants), SelectedPointtype.Text);
+
+                FrozenDictionary<string, string> attriDic;
+                attriDic = !string.IsNullOrEmpty(TagAttris) ? MatchAttri(TagAttris) : null;
+
+                MyPISDKHelper.CreateMutiPoint(tagNamesArray, pointType, attriDic);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                await ToastService.Error("添加失败", $"{e.Message}", autoHide: true);
+            }
+        }
+
+        return;
+    }
+
+    private FrozenDictionary<string, string> MatchAttri(string attriString)
+    {
+        var pattern = "\"(.*?)\"=\"(.*?)\"";
+        var matches = Regex.Matches(attriString, pattern);
+
+        var attriDic = matches.Select(m => new KeyValuePair<string, string>(m.Groups[1].Value, m.Groups[2].Value))
+            .ToFrozenDictionary();
+
+        return attriDic;
+    }
+
+
+    private async void OnBtnUpdatePoint(MouseEventArgs obj)
+    {
+        if (!string.IsNullOrWhiteSpace(TagName) && !string.IsNullOrWhiteSpace(NewValue) && SelectedDataMergeOpt is not null)
+        {
+            try
+            {
+                var mergeOpt = (DataMergeConstants)Enum.Parse(typeof(DataMergeConstants), SelectedDataMergeOpt.Text);
+
+                MyPISDKHelper.UpdateValue(TagName, NewValue, mergeOpt);
+
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                await ToastService.Error("更新失败", $"{e.Message}", autoHide: true);
+            }
+        }
+    }
+}
