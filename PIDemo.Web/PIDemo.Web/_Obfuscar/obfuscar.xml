@@ -17,7 +17,9 @@
   <Module file="$(InPath)\PIDemo.Web.dll">
     <SkipType name="*AnonymousType*" skipProperties="true" skipMethods="true" skipFields="true" skipEvents="true" skipStringHiding="true" />
   </Module>
+  <AssemblySearchPath path="..\..\PIDemo.Service\bin\Release\net8.0\" />
   <AssemblySearchPath path="..\PIDemo.Web\" />
+  <AssemblySearchPath path="..\PIDemo.Web.Client\bin\Release\net8.0\" />
   <AssemblySearchPath path="C:\Program Files\dotnet\packs\Microsoft.AspNetCore.App.Ref\8.0.10\ref\net8.0\" />
   <AssemblySearchPath path="C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref\8.0.10\ref\net8.0\" />
   <AssemblySearchPath path="C:\Users\udeii\.nuget\packages\bootstrapblazor.fontawesome\9.0.0-beta02\lib\net8.0\" />

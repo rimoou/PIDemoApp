@@ -15,6 +15,7 @@ builder.Services.AddSingleton(typeof(PISDKHelper));
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+
 if (app.Environment.IsDevelopment())
 {
     app.UseWebAssemblyDebugging();
